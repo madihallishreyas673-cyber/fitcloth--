@@ -1,0 +1,1720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FitStore — AI Clothing Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0a0800;--bg2:#111008;--bg3:#1a160a;
+  --border:#2a2210;--borderGold:#c9a84c;
+  --gold:#c9a84c;--goldLight:#e8c96a;--goldDim:#8a6f2e;
+  --text:#f5ead8;--textMid:#a89060;--textDim:#5a4a2e;
+  --red:#e05050;--green:#50c878;
+  --font:'Palatino Linotype','Book Antiqua',Palatino,serif;
+  --fontMono:'Courier New',monospace;
+}
+html,body{background:var(--bg)!important;overflow-x:hidden!important;overscroll-behavior-x:none!important;overscroll-behavior-y:none!important;width:100%;max-width:100vw;}
+body{background:var(--bg)!important;font-family:var(--font);}
+#root{background:var(--bg);min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:#111008;}
+::-webkit-scrollbar-thumb{background:#8a6f2e;border-radius:2px;}
+input:focus,select:focus{outline:none;border-color:var(--gold)!important;}
+input::placeholder{color:var(--textDim);}
+select{appearance:none;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes shimmer{0%,100%{opacity:.6;}50%{opacity:1;}}
+@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,.4);}50%{box-shadow:0 0 0 12px rgba(201,168,76,0);}}
+@keyframes scanLine{0%,100%{top:10%;}50%{top:88%;}}
+.fadeUp{animation:fadeUp .5s ease forwards;}
+.card-hover{transition:transform .25s,box-shadow .25s;cursor:pointer;}
+.card-hover:hover{transform:translateY(-3px);box-shadow:0 12px 40px rgba(201,168,76,.15)!important;}
+.scan-line{position:absolute;left:5%;right:5%;height:2px;background:linear-gradient(90deg,transparent,#c9a84c,transparent);box-shadow:0 0 8px #c9a84c;animation:scanLine 2s ease-in-out infinite;}
+.hidden{display:none!important;}
+button{font-family:var(--font);cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<img id="dynamic-ar-overlay" src="" style="position: fixed; display: none; pointer-events: none; transform: translate(-50%, -50%); z-index: 99999; object-fit: contain;" alt="AR Try-on"/>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//   DESIGN TOKENS
+// ═══════════════════════════════════════════════════════════════
+const T = {
+  bg:"#0a0800",bg2:"#111008",bg3:"#1a160a",border:"#2a2210",borderGold:"#c9a84c",
+  gold:"#c9a84c",goldLight:"#e8c96a",goldDim:"#8a6f2e",
+  text:"#f5ead8",textMid:"#a89060",textDim:"#5a4a2e",
+  red:"#e05050",green:"#50c878",
+  font:"'Palatino Linotype','Book Antiqua',Palatino,serif",
+  fontMono:"'Courier New',monospace",
+};
+
+// ═══════════════════════════════════════════════════════════════
+//   SAMPLE DATA
+// ═══════════════════════════════════════════════════════════════
+const SAMPLE_CLOTHES = [
+  {id:"d1",name:"Silk Anarkali Gown",type:"dress",ageGroup:"adult",sizes:["S","M","L","XL"],price:2499,color:"#8B3A8B",desc:"Deep violet silk with gold embroidery",photo:null},
+  {id:"d2",name:"Cotton Kurta",type:"top",ageGroup:"adult",sizes:["S","M","L","XL","XXL"],price:799,color:"#2E5F8A",desc:"Breathable everyday comfort",photo:null},
+  {id:"d3",name:"Kids Frock",type:"dress",ageGroup:"kids",sizes:["2-3Y","4-5Y","6-7Y","8-9Y"],price:599,color:"#E87070",desc:"Ruffled hem, festive look",photo:null},
+  {id:"d4",name:"Denim Jeans",type:"bottom",ageGroup:"teen",sizes:["26","28","30","32"],price:1199,color:"#3A5A8A",desc:"Slim-fit stretch denim",photo:null},
+  {id:"d5",name:"Formal Blazer",type:"jacket",ageGroup:"adult",sizes:["S","M","L","XL"],price:3299,color:"#1A1A1A",desc:"Structured wool blend",photo:null},
+  {id:"d6",name:"Senior Comfort Kurti",type:"dress",ageGroup:"senior",sizes:["L","XL","XXL","XXXL"],price:999,color:"#7A9E6A",desc:"Relaxed fit, breathable cotton",photo:null},
+  {id:"d7",name:"Teen Graphic Tee",type:"top",ageGroup:"teen",sizes:["XS","S","M","L"],price:499,color:"#E8A030",desc:"Bold print, street style",photo:null},
+  {id:"d8",name:"Baby Romper",type:"other",ageGroup:"kids",sizes:["0-6M","6-12M","1-2Y"],price:449,color:"#F0D080",desc:"Soft organic cotton, snap buttons",photo:null},
+];
+
+
+// ─── SECURITY UTILITIES ────────────────────────────────────────
+// Simple hash for demo (in production use bcrypt on a backend)
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("fitstore_salt_v1:"+pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+function generateToken() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+// Rate limiter — max 5 failed logins per 15 min per shopID
+const _failedLogins = {};
+function isRateLimited(shopId) {
+  const key = (shopId||"").toUpperCase();
+  const now = Date.now();
+  if(!_failedLogins[key]) return false;
+  _failedLogins[key] = _failedLogins[key].filter(t => now-t < 15*60*1000);
+  return _failedLogins[key].length >= 5;
+}
+function recordFailedLogin(shopId) {
+  const key = (shopId||"").toUpperCase();
+  if(!_failedLogins[key]) _failedLogins[key] = [];
+  _failedLogins[key].push(Date.now());
+}
+
+// Session store (in-memory, cleared on page reload — intentional for a single-page app)
+let SESSION_TOKEN = null;
+let SESSION_SHOP_ID = null;
+function createSession(shopId) {
+  SESSION_TOKEN = generateToken();
+  SESSION_SHOP_ID = shopId;
+  // Store only token fingerprint in sessionStorage (not password)
+  try { sessionStorage.setItem("fs_session_token", SESSION_TOKEN); sessionStorage.setItem("fs_session_shop", shopId); } catch(e){}
+}
+function destroySession() {
+  SESSION_TOKEN = null; SESSION_SHOP_ID = null;
+  try { sessionStorage.removeItem("fs_session_token"); sessionStorage.removeItem("fs_session_shop"); } catch(e){}
+}
+function restoreSession() {
+  try {
+    const t = sessionStorage.getItem("fs_session_token");
+    const s = sessionStorage.getItem("fs_session_shop");
+    if(t && s) { SESSION_TOKEN = t; SESSION_SHOP_ID = s; return {token:t, shopId:s}; }
+  } catch(e){}
+  return null;
+}
+
+// Input sanitiser — strips HTML tags to prevent XSS
+function sanitize(str) {
+  return String(str||"").replace(/[<>"'`]/g,"").trim();
+}
+
+// SECURITY: Never expose password in state. Shops are stored with hashed passwords.
+const SHOPS_INIT = [{
+  id:"SHOP001",name:"Ritu's Boutique",owner:"Ritu Sharma",
+  address:"12 MG Road, Bangalore — 560001",
+  phone:"9876543210",
+  // sha256("fitstore_salt_v1:1234") — demo password is 1234
+  passwordHash:"d9b3030cc09c5c6abfcbf19f6ba879c24e90fc7e6e47e12e9b42a41c3e2c8b26",
+  clothes:[...SAMPLE_CLOTHES],
+}];
+
+
+// ─── PERSISTENT STORAGE ────────────────────────────────────
+const LS_KEY = "fitstore_shops_v1";
+function loadShops() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) {
+      const parsed = JSON.parse(raw);
+      return parsed.map(s=>({
+        ...s,
+        id: sanitize(s.id),
+        name: sanitize(s.name),
+        owner: sanitize(s.owner),
+        address: sanitize(s.address),
+        phone: sanitize(s.phone),
+        passwordHash: s.passwordHash||s.password||"",
+        password: undefined,
+        clothes:(s.clothes||[]).map(c=>({
+          ...c,
+          id:sanitize(c.id),
+          name:sanitize(c.name),
+          desc:sanitize(c.desc),
+          type:sanitize(c.type),
+          ageGroup:sanitize(c.ageGroup),
+        }))
+      }));
+    }
+  } catch(e){}
+  const init = SHOPS_INIT.map(s=>({...s,clothes:[...s.clothes.map(c=>({...c}))]}));
+  saveShops(init);
+  return init;
+}
+function saveShops(shops) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(shops)); } catch(e){}
+}
+
+const AGE_COLOR = {kids:"#f59e0b",teen:"#e879f9",adult:"#60a5fa",senior:"#34d399"};
+const AGE_LABEL = {kids:"👶 Kids",teen:"🧑 Teen",adult:"👨 Adult",senior:"👴 Senior"};
+
+function typeSVG(type, color) {
+  const shapes = {
+    dress:`<path d="M30 8 Q40 4 50 8 L60 28 Q68 24 70 32 L54 48 L57 90 L23 90 L26 48 L10 32 Q12 24 20 28 Z" fill="${color}" stroke="#000" stroke-width="2"/><path d="M30 8 Q40 18 50 8" fill="none" stroke="#000" stroke-width="2"/><ellipse cx="40" cy="7" rx="9" ry="5" fill="${color}" stroke="#000" stroke-width="1.5"/>`,
+    top:`<path d="M22 12 L8 6 L0 22 L16 28 L16 72 L64 72 L64 28 L80 22 L72 6 L58 12 Q50 20 40 20 Q30 20 22 12Z" fill="${color}" stroke="#000" stroke-width="2"/>`,
+    bottom:`<path d="M12 8 L68 8 L70 50 L54 50 L48 92 L32 92 L26 50 L10 50 Z" fill="${color}" stroke="#000" stroke-width="2"/><line x1="40" y1="8" x2="40" y2="50" stroke="#000" stroke-width="1.5"/>`,
+    jacket:`<path d="M26 8 L10 2 L0 22 L20 30 L20 86 L60 86 L60 30 L80 22 L70 2 L54 8 L44 22 L36 22 Z" fill="${color}" stroke="#000" stroke-width="2"/><line x1="40" y1="22" x2="40" y2="86" stroke="#000" stroke-width="1.5"/>`,
+    other:`<rect x="15" y="10" width="50" height="75" rx="8" fill="${color}" stroke="#000" stroke-width="2"/><circle cx="40" cy="48" r="12" fill="none" stroke="#000" stroke-width="2"/>`,
+  };
+  const d = shapes[type] || shapes.other;
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100">${d}</svg>`)}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+let STATE = {
+  view:"landing",
+  shops:loadShops(),
+  custShop:null,
+  scanId:"",
+  scanErr:"",
+  showQRScan:false,
+  shopkeeperShop:null,
+  shopkeeperTab:"inventory",
+  shopkeeperAuthTab:"login",
+  shopkeeperLogId:"",
+  shopkeeperLogPw:"",
+  shopkeeperReg:{name:"",owner:"",address:"",phone:"",password:""},
+  shopkeeperErr:"",
+  inventoryAgeFilter:"all",
+  uploadPhase:"choose",
+  uploadPreview:null,
+  uploadAiData:null,
+  uploadEdited:null,
+  uploadCamError:"",
+  customerTab:"browse",
+  browseAgeFilter:"all",
+  fitForm:{height:"",weight:"",age:""},
+  fitRecs:[],
+  fitLoading:false,
+  fitDone:false,
+  arCamState:"idle",
+  arSelected:null,
+  arCamMsg:"",
+  analyticsData:null,
+};
+
+let videoStream = null;
+let arStream = null;
+let arAnimFrame = null;
+let arOverlayPos = {x:0.5,y:0.38,scale:1};
+let arDragging = false;
+let arPinchDist = 0;
+let uploadStream = null;
+
+// ═══════════════════════════════════════════════════════════════
+//   DYNAMIC MEDIAPIPE CORE CONTROLLER ENGINE
+// ═══════════════════════════════════════════════════════════════
+let mediapipePoseEngine = null;
+let activeMediaPipeCamera = null;
+
+function initializeDynamicAR(videoElement) {
+  const overlayImg = document.getElementById('dynamic-ar-overlay');
+  if (!overlayImg) return;
+
+  mediapipePoseEngine = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+  });
+
+  mediapipePoseEngine.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+
+  mediapipePoseEngine.onResults((results) => {
+    // Hide overlay if no item is selected or no person is tracked
+    if (!STATE.arSelected || !results.poseLandmarks) {
+      overlayImg.style.display = "none";
+      return;
+    }
+
+    // Load the shopkeeper's real uploaded picture or fallback to vector shape templates
+    overlayImg.src = STATE.arSelected.photo || typeSVG(STATE.arSelected.type, STATE.arSelected.color);
+
+    // Grab left shoulder (Point 11) and right shoulder (Point 12)
+    const leftShoulder = results.poseLandmarks[11];
+    const rightShoulder = results.poseLandmarks[12];
+
+    // Read live camera canvas dimensions on the screen
+    const rect = videoElement.getBoundingClientRect();
+
+    // Map physical shoulder midpoints to screen layout pixels
+    const midX = ((leftShoulder.x + rightShoulder.x) / 2) * rect.width;
+    const midY = ((leftShoulder.y + rightShoulder.y) / 2) * rect.height;
+
+    // Measure human width profile to scale garment width dynamically
+    const baseDistance = Math.sqrt(
+      Math.pow(leftShoulder.x - rightShoulder.x, 2) + 
+      Math.pow(leftShoulder.y - rightShoulder.y, 2)
+    );
+    const responsiveWidth = baseDistance * rect.width * 1.6; // 1.6 scales the drape to shoulders
+
+    // Live update style nodes
+    overlayImg.style.display = "block";
+    overlayImg.style.left = `${rect.left + (rect.width - midX)}px`; // Inverted for mirror camera tracking
+    overlayImg.style.top = `${rect.top + midY + (responsiveWidth * 0.1)}px`; // Centers neckline slightly down
+    overlayImg.style.width = `${responsiveWidth}px`;
+  });
+}
+
+function setState(patch) {
+  Object.assign(STATE, typeof patch === 'function' ? patch(STATE) : patch);
+  saveShops(STATE.shops);
+  render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   REAL QR CODE — uses qrcode.js (loaded below)
+// ═══════════════════════════════════════════════════════════════
+function drawQR(container, value, size=200) {
+  // container can be a <div> or a <canvas> wrapper div
+  container.innerHTML = "";
+  const doRender = () => {
+    if(window.QRCode) {
+      new QRCode(container, {
+        text: value,
+        width: size,
+        height: size,
+        colorDark: "#0a0800",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+    } else {
+      // Fallback: retry after library loads
+      setTimeout(doRender, 200);
+    }
+  };
+  doRender();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   AI HELPERS
+// ═══════════════════════════════════════════════════════════════
+async function aiAnalyzeCloth(base64) {
+  // Security: limit base64 size ~5MB to prevent abuse
+  if(!base64 || base64.length > 7_000_000) return null;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-20250514",max_tokens:800,
+        messages:[{role:"user",content:[
+          {type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64}},
+          {type:"text",text:`Analyze this clothing image. Return ONLY valid JSON, no markdown, no explanation:
+{"name":"descriptive name","type":"dress|top|bottom|jacket|other","ageGroup":"kids|teen|adult|senior","price":number_in_INR,"color":"#hexcolor","desc":"one sentence","sizes":["array","of","size","options"]}
+
+Rules:
+- price: realistic Indian market price
+- ageGroup: based on style/cut/size appearance
+- color: dominant color as hex
+- sizes: standard sizes for that type (e.g. S/M/L/XL or 28/30/32 or 2-3Y/4-5Y)`}
+        ]}]
+      })
+    });
+    const d = await res.json();
+    const txt = d.content?.map(x=>x.text||"").join("")||"";
+    return JSON.parse(txt.replace(/```json|```/g,"").trim());
+  } catch{return null;}
+}
+
+async function aiSizeRecommend(height, weight, age, clothes) {
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-20250514",max_tokens:1000,
+        messages:[{role:"user",content:`Customer: height=${height}cm, weight=${weight}kg, age=${age}yrs.
+Items: ${JSON.stringify(clothes.map(c=>({id:c.id,name:c.name,type:c.type,sizes:c.sizes,ageGroup:c.ageGroup})))}
+Return ONLY JSON array:
+[{"id":"clothId","size":"recommended_size","fit":"Perfect fit|Slightly loose|Slightly fitted","note":"1 line tip"}]`}]
+      })
+    });
+    const d = await res.json();
+    const txt = d.content?.map(x=>x.text||"").join("")||"";
+    return JSON.parse(txt.replace(/```json|```/g,"").trim());
+  } catch{return [];}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   DOM HELPERS
+// ═══════════════════════════════════════════════════════════════
+function el(tag, attrs={}, ...children) {
+  const e = document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)) {
+    if(k==="style" && typeof v==="object") Object.assign(e.style, v);
+    else if(k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), v);
+    else if(k==="className") e.className=v;
+    else e.setAttribute(k,v);
+  }
+  for(const c of children) {
+    if(c==null||c===false||c===undefined) continue;
+    if(typeof c==="string"||typeof c==="number") e.appendChild(document.createTextNode(String(c)));
+    else if(c instanceof Node) e.appendChild(c);
+  }
+  return e;
+}
+
+function div(attrs, ...children) { return el("div", attrs, ...children); }
+function span(attrs, ...children) { return el("span", attrs, ...children); }
+function btn(attrs, ...children) { return el("button", attrs, ...children); }
+function inp(attrs) { return el("input", attrs); }
+function h2(attrs, ...children) { return el("h2", attrs, ...children); }
+function p(attrs, ...children) { return el("p", attrs, ...children); }
+
+function goldBtn(text, onClick, opts={}) {
+  const {outline,small,full,disabled}=opts;
+  const b = btn({
+    style:{
+      background: outline?"transparent":`linear-gradient(135deg,${T.goldDim},${T.gold},${T.goldLight})`,
+      color: outline?T.gold:"#0a0800",
+      border: outline?`1px solid ${T.gold}`:"none",
+      borderRadius:"6px",cursor:disabled?"not-allowed":"pointer",
+      fontFamily:"'Cinzel',serif",fontWeight:"700",
+      fontSize:small?"12px":"14px",letterSpacing:"1px",
+      padding:small?"7px 16px":"12px 28px",
+      opacity:disabled?.5:1,
+      width:full?"100%":"auto",
+      transition:"all .2s",whiteSpace:"nowrap",
+    },
+    onClick: disabled?undefined:onClick,
+    onMouseenter:e=>{if(!disabled)e.currentTarget.style.opacity=".85";},
+    onMouseleave:e=>{if(!disabled)e.currentTarget.style.opacity="1";},
+  }, text);
+  return b;
+}
+
+function field(label, value, onChange, placeholder, type="text") {
+  const wrap = div({style:{marginBottom:"16px"}});
+  wrap.appendChild(el("label",{style:{display:"block",color:T.textMid,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:"6px"}}, label));
+  const input = inp({type,value,placeholder,style:{width:"100%",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:"6px",color:T.text,padding:"11px 14px",fontSize:"14px",fontFamily:T.font,transition:"border-color .2s"}});
+  input.addEventListener("input",e=>onChange(e.target.value));
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function tag(label, color) {
+  return span({style:{background:color+"22",color,border:`1px solid ${color}44`,padding:"2px 10px",borderRadius:"20px",fontSize:"11px",fontFamily:"'Cinzel',serif",fontWeight:"600",letterSpacing:".5px"}}, label);
+}
+
+function divider() {
+  return div({style:{height:"1px",background:`linear-gradient(90deg,transparent,${T.borderGold},transparent)`,margin:"20px 0"}});
+}
+
+function filterPill(label, count, active, color, onClick) {
+  return btn({
+    style:{background:active?color+"33":"transparent",color:active?color:T.textMid,
+      border:`1px solid ${active?color:T.border}`,padding:"6px 16px",borderRadius:"20px",fontSize:"12px",
+      fontFamily:"'Cinzel',serif",fontWeight:"600",cursor:"pointer",transition:"all .2s",letterSpacing:".5px",whiteSpace:"nowrap"},
+    onClick
+  }, `${label} (${count})`);
+}
+
+function clothCard(item, onRemove) {
+  const card = div({className:"card-hover",style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"12px",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,.4)"}});
+  const imgWrap = div({style:{background:item.color+"18",height:"150px",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden"}});
+  if(item.photo){
+    imgWrap.appendChild(el("img",{src:item.photo,alt:item.name,style:{width:"100%",height:"100%",objectFit:"cover"}}));
+  } else {
+    imgWrap.appendChild(el("img",{src:typeSVG(item.type,item.color),alt:item.name,style:{height:"110px",objectFit:"contain"}}));
+  }
+  const tagWrap = div({style:{position:"absolute",top:"8px",left:"8px"}});
+  tagWrap.appendChild(tag(AGE_LABEL[item.ageGroup]||item.ageGroup, AGE_COLOR[item.ageGroup]||T.gold));
+  imgWrap.appendChild(tagWrap);
+  if(onRemove) {
+    const rmBtn = btn({style:{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,.7)",border:"none",color:"#ef4444",borderRadius:"4px",padding:"3px 7px",cursor:"pointer",fontSize:"12px"},onClick:onRemove}, "✕");
+    imgWrap.appendChild(rmBtn);
+  }
+  card.appendChild(imgWrap);
+  const info = div({style:{padding:"12px 14px"}});
+  info.appendChild(div({style:{color:T.text,fontWeight:"700",fontSize:"14px",marginBottom:"3px",fontFamily:"'Cinzel',serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, item.name));
+  info.appendChild(div({style:{color:T.textMid,fontSize:"12px",marginBottom:"8px",lineHeight:"1.4"}}, item.desc));
+  const row = div({style:{display:"flex",justifyContent:"space-between",alignItems:"center"}});
+  row.appendChild(span({style:{color:T.gold,fontWeight:"800",fontSize:"16px",fontFamily:"'Cinzel',serif"}}, `₹${item.price}`));
+  const sizeRow = div({style:{display:"flex",gap:"3px",flexWrap:"wrap"}});
+  (item.sizes||[]).slice(0,3).forEach(s=>{
+    sizeRow.appendChild(span({style:{background:T.bg2,color:T.textMid,padding:"2px 6px",borderRadius:"4px",fontSize:"10px",border:`1px solid ${T.border}`}}, s));
+  });
+  row.appendChild(sizeRow);
+  info.appendChild(row);
+  card.appendChild(info);
+  return card;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   QR SCANNER
+// ═══════════════════════════════════════════════════════════════
+let scanStream = null;
+let scanAnimFrame = null;
+let scanBarcodeDetector = null;
+
+async function startQRScanner(onDetected, onClose) {
+  const overlay = div({style:{position:"fixed",inset:"0",background:"rgba(0,0,0,0.96)",zIndex:"9999",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}});
+  document.body.appendChild(overlay);
+
+  const wrap = div({style:{width:"100%",maxWidth:"420px"}});
+  overlay.appendChild(wrap);
+
+  // Header
+  const header = div({style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px"}});
+  const headerLeft = div({});
+  headerLeft.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"18px"}}, "Scan Shop QR"));
+  headerLeft.appendChild(div({style:{color:T.textMid,fontSize:"12px",marginTop:"2px"}}, "Point camera at the shop's QR code"));
+  header.appendChild(headerLeft);
+  const closeBtn = btn({style:{background:T.bg3,border:`1px solid ${T.border}`,color:T.textMid,borderRadius:"8px",padding:"8px 16px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px",letterSpacing:"1px"},
+    onClick:()=>{cleanup();onClose();}}, "✕ CLOSE");
+  header.appendChild(closeBtn);
+  wrap.appendChild(header);
+
+  const contentArea = div({});
+  wrap.appendChild(contentArea);
+
+  function cleanup() {
+    scanStream?.getTracks().forEach(t=>t.stop());
+    scanStream=null;
+    cancelAnimationFrame(scanAnimFrame);
+    if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+
+  // Load jsQR
+  if(!window.jsQR) {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js";
+    document.head.appendChild(s);
+  }
+
+  // Build viewfinder
+  const viewfinderWrap = div({style:{position:"relative",borderRadius:"16px",overflow:"hidden",background:"#000",aspectRatio:"4/3",width:"100%",border:`1px solid ${T.border}`}});
+  const video = el("video",{autoplay:"",playsinline:"",muted:"",style:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});
+  const canvas = el("canvas",{style:{display:"none"}});
+  viewfinderWrap.appendChild(video);
+  viewfinderWrap.appendChild(canvas);
+
+  // Spinner (starting)
+  const spinnerWrap = div({style:{position:"absolute",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"12px"}});
+  const spinner = div({style:{width:"36px",height:"36px",border:`3px solid ${T.border}`,borderTopColor:T.gold,borderRadius:"50%",animation:"spin 1s linear infinite"}});
+  spinnerWrap.appendChild(spinner);
+  spinnerWrap.appendChild(div({style:{color:T.textMid,fontSize:"13px"}}, "Starting camera…"));
+  viewfinderWrap.appendChild(spinnerWrap);
+
+  contentArea.appendChild(viewfinderWrap);
+
+  const hint = div({style:{marginTop:"16px",padding:"12px 16px",background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"10px",display:"flex",gap:"10px",alignItems:"center"}});
+  hint.appendChild(span({style:{fontSize:"18px"}}, "💡"));
+  hint.appendChild(span({style:{color:T.textMid,fontSize:"12px",lineHeight:"1.5"}}, "Hold the camera steady over the shop's QR code. The shop will open automatically when detected."));
+  contentArea.appendChild(hint);
+
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject = scanStream;
+    await video.play();
+    // ═══════════════════════════════════════════════════════════════
+     //   START AUTOMATIC MEDIAPIPE SHOULDER CAPTURE LOOP
+     // ═══════════════════════════════════════════════════════════════
+     if (!mediapipePoseEngine) {
+       initializeDynamicAR(video);
+     }
+
+     if (!activeMediaPipeCamera) {
+       activeMediaPipeCamera = new Camera(video, {
+         onFrame: async () => {
+           if (mediapipePoseEngine && STATE.view === "customer") {
+             await mediapipePoseEngine.send({ image: video });
+           }
+         },
+         width: 640,
+         height: 480
+       });
+       activeMediaPipeCamera.start();
+     }
+    spinnerWrap.remove();
+
+    // Corners overlay
+    const cornersOverlay = div({style:{position:"absolute",inset:"0",display:"flex",alignItems:"center",justifyContent:"center"}});
+    const cornerBox = div({style:{position:"relative",width:"55%",aspectRatio:"1"}});
+    const corners = [{top:"0",left:"0",borderTop:`3px solid ${T.gold}`,borderLeft:`3px solid ${T.gold}`,borderRadius:"4px 0 0 0"},
+      {top:"0",right:"0",borderTop:`3px solid ${T.gold}`,borderRight:`3px solid ${T.gold}`,borderRadius:"0 4px 0 0"},
+      {bottom:"0",left:"0",borderBottom:`3px solid ${T.gold}`,borderLeft:`3px solid ${T.gold}`,borderRadius:"0 0 0 4px"},
+      {bottom:"0",right:"0",borderBottom:`3px solid ${T.gold}`,borderRight:`3px solid ${T.gold}`,borderRadius:"0 0 4px 0"}];
+    corners.forEach(c=>{
+      cornerBox.appendChild(div({style:{position:"absolute",width:"28px",height:"28px",...c}}));
+    });
+    const scanLineEl = div({className:"scan-line"});
+    cornerBox.appendChild(scanLineEl);
+    cornersOverlay.appendChild(cornerBox);
+    viewfinderWrap.appendChild(cornersOverlay);
+
+    const scanLabel = div({style:{position:"absolute",bottom:"14px",left:"0",right:"0",textAlign:"center",color:T.gold,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1.5px"}}, "SCANNING FOR QR CODE…");
+    viewfinderWrap.appendChild(scanLabel);
+
+    // BarcodeDetector
+    let barcodeDetector = null;
+    if("BarcodeDetector" in window) {
+      try { barcodeDetector = new window.BarcodeDetector({formats:["qr_code"]}); } catch(e){}
+    }
+
+    const scan = async () => {
+      if(!video||video.readyState<2){scanAnimFrame=requestAnimationFrame(scan);return;}
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+      const ctx=canvas.getContext("2d");
+      ctx.drawImage(video,0,0);
+      try {
+        if(barcodeDetector){
+          const codes=await barcodeDetector.detect(video);
+          if(codes.length>0){
+            const val=codes[0].rawValue;
+            const match=val.match(/SHOP\d+/i);
+            if(match){cleanup();onDetected(match[0].toUpperCase());return;}
+          }
+        }
+        if(window.jsQR){
+          const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+          const code=window.jsQR(imageData.data,canvas.width,canvas.height,{inversionAttempts:"dontInvert"});
+          if(code){
+            const val=code.data;
+            const match=val.match(/SHOP\d+/i);
+            if(match){cleanup();onDetected(match[0].toUpperCase());return;}
+            if(/^SHOP\d+$/i.test(val.trim())){cleanup();onDetected(val.trim().toUpperCase());return;}
+          }
+        }
+      } catch(e){}
+      scanAnimFrame=requestAnimationFrame(scan);
+    };
+    scanAnimFrame=requestAnimationFrame(scan);
+
+  } catch(e) {
+    spinnerWrap.remove();
+    const errMsg = e.name==="NotAllowedError"?"Camera permission denied. Please allow camera access in your browser settings and try again.":`Camera error: ${e.message}`;
+    contentArea.innerHTML="";
+    const errBox = div({style:{background:"#200a0a",border:"1px solid #7a1a1a",borderRadius:"14px",padding:"24px",textAlign:"center"}});
+    errBox.appendChild(div({style:{fontSize:"40px",marginBottom:"12px"}}, "📷"));
+    errBox.appendChild(div({style:{color:"#f87171",fontSize:"13px",lineHeight:"1.7",marginBottom:"16px"}}, errMsg));
+    errBox.appendChild(goldBtn("← GO BACK", ()=>{cleanup();onClose();}));
+    contentArea.appendChild(errBox);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   VIEWS
+// ═══════════════════════════════════════════════════════════════
+
+function renderLanding() {
+  const root = div({style:{minHeight:"100vh",background:T.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px",fontFamily:T.font,overflowX:"hidden"}});
+
+  // Background
+  root.appendChild(div({style:{position:"fixed",inset:"0",background:T.bg,backgroundImage:`radial-gradient(ellipse at 20% 50%, #1a1408 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, #120e02 0%, transparent 50%)`,pointerEvents:"none",zIndex:"0"}}));
+
+  // Hero
+  const hero = div({style:{position:"relative",zIndex:"1",textAlign:"center",marginBottom:"56px",animation:"fadeUp .8s ease forwards"}});
+  hero.appendChild(div({style:{fontSize:"14px",color:T.goldDim,fontFamily:"'Cinzel',serif",letterSpacing:"6px",marginBottom:"12px",textTransform:"uppercase"}}, "AI Clothing Platform"));
+  const h1 = el("h1",{style:{fontSize:"52px",fontFamily:"'Cinzel',serif",fontWeight:"900",color:T.gold,letterSpacing:"-1px",lineHeight:"1",marginBottom:"8px"}}, "FitStore");
+  hero.appendChild(h1);
+  hero.appendChild(div({style:{width:"120px",height:"2px",background:`linear-gradient(90deg,transparent,${T.gold},transparent)`,margin:"16px auto"}}));
+  hero.appendChild(p({style:{color:T.textMid,fontSize:"16px",fontStyle:"italic",fontFamily:"'Cormorant Garamond',serif"}}, "Where every garment finds its perfect owner"));
+  root.appendChild(hero);
+
+  // Cards row
+  const cardsRow = div({style:{display:"flex",gap:"28px",flexWrap:"wrap",justifyContent:"center",position:"relative",zIndex:"1",width:"100%",maxWidth:"700px"}});
+
+  // Shopkeeper card
+  const skCard = div({className:"card-hover",style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"36px",width:"300px",cursor:"pointer",boxShadow:"0 8px 40px rgba(0,0,0,.6)",animation:"fadeUp .6s .1s ease both",flex:"1 1 260px"}});
+  skCard.appendChild(div({style:{fontSize:"44px",marginBottom:"16px"}}, "🏪"));
+  skCard.appendChild(div({style:{fontFamily:"'Cinzel',serif",color:T.goldLight,fontSize:"20px",fontWeight:"700",marginBottom:"8px"}}, "Shopkeeper"));
+  skCard.appendChild(div({style:{color:T.textMid,fontSize:"14px",lineHeight:"1.6",marginBottom:"20px"}}, "Register your shop, upload your collection, and get a unique QR code for your customers."));
+  skCard.appendChild(div({style:{display:"inline-block",background:`linear-gradient(135deg,${T.goldDim},${T.gold})`,color:"#0a0800",padding:"9px 22px",borderRadius:"6px",fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"12px",letterSpacing:"1px"}}, "ENTER PORTAL →"));
+  skCard.addEventListener("click",()=>setState({view:"shopkeeper",shopkeeperAuthTab:"login",shopkeeperErr:""}));
+  cardsRow.appendChild(skCard);
+
+  // Customer card
+  const custCard = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"36px",width:"300px",boxShadow:"0 8px 40px rgba(0,0,0,.6)",animation:"fadeUp .6s .2s ease both",flex:"1 1 260px"}});
+  custCard.appendChild(div({style:{fontSize:"44px",marginBottom:"16px"}}, "🛍️"));
+  custCard.appendChild(div({style:{fontFamily:"'Cinzel',serif",color:T.goldLight,fontSize:"20px",fontWeight:"700",marginBottom:"8px"}}, "Customer"));
+  custCard.appendChild(div({style:{color:T.textMid,fontSize:"14px",lineHeight:"1.6",marginBottom:"16px"}}, "Scan the shop's QR code, or enter the Shop ID manually to browse the collection."));
+
+  const scanQrBtn = btn({style:{width:"100%",background:`linear-gradient(135deg,#1a1408,#2a2210)`,border:`1px solid ${T.gold}`,borderRadius:"8px",color:T.gold,padding:"13px",marginBottom:"12px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"13px",letterSpacing:"1px",display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",transition:"all .2s"}},
+    span({style:{fontSize:"20px"}}, "📷"), " SCAN QR CODE");
+  scanQrBtn.addEventListener("mouseenter",e=>e.currentTarget.style.background=`linear-gradient(135deg,#2a2210,#3a3018)`);
+  scanQrBtn.addEventListener("mouseleave",e=>e.currentTarget.style.background=`linear-gradient(135deg,#1a1408,#2a2210)`);
+  scanQrBtn.addEventListener("click",()=>{
+    startQRScanner(
+      shopId=>{
+        STATE.shops = loadShops();
+        const s = STATE.shops.find(x=>x.id===shopId.toUpperCase());
+        if(s) setState({custShop:s,view:"customer",customerTab:"browse"});
+        else setState({scanErr:`Shop "${shopId}" not found.`});
+      },
+      ()=>{}
+    );
+  });
+  custCard.appendChild(scanQrBtn);
+
+  // OR divider
+  const orRow = div({style:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}});
+  orRow.appendChild(div({style:{flex:"1",height:"1px",background:T.border}}));
+  orRow.appendChild(span({style:{color:T.textDim,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1px"}}, "OR"));
+  orRow.appendChild(div({style:{flex:"1",height:"1px",background:T.border}}));
+  custCard.appendChild(orRow);
+
+  const scanInput = inp({type:"text",value:STATE.scanId,placeholder:"Enter Shop ID  e.g. SHOP001",style:{width:"100%",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:"6px",color:T.text,padding:"10px 14px",fontSize:"14px",marginBottom:"10px",fontFamily:T.fontMono,transition:"border-color .2s"}});
+  scanInput.addEventListener("input",e=>{ STATE.scanId=e.target.value; });
+  scanInput.addEventListener("keydown",e=>{ if(e.key==="Enter") enterShop(STATE.scanId); });
+  custCard.appendChild(scanInput);
+
+  if(STATE.scanErr) custCard.appendChild(div({style:{color:T.red,fontSize:"12px",marginBottom:"10px"}}, STATE.scanErr));
+
+  custCard.appendChild(goldBtn("ENTER SHOP →", ()=>enterShop(STATE.scanId), {full:true}));
+  custCard.appendChild(div({style:{color:T.textDim,fontSize:"11px",textAlign:"center",marginTop:"10px"}},
+    "Demo: ", span({style:{color:T.goldDim,fontFamily:T.fontMono}}, "SHOP001")));
+
+  cardsRow.appendChild(custCard);
+  root.appendChild(cardsRow);
+  return root;
+}
+
+function enterShop(id) {
+  // Reload shops from localStorage to pick up any changes from other sessions
+  STATE.shops = loadShops();
+  const s = STATE.shops.find(x=>x.id===id.trim().toUpperCase());
+  if(!s) { setState({scanErr:"Shop not found. Check the ID."}); return; }
+  setState({custShop:s,scanErr:"",view:"customer",customerTab:"browse"});
+}
+
+// ─── SHOPKEEPER AUTH ─────────────────────────────────────────
+function renderShopkeeperAuth() {
+  const root = div({style:{minHeight:"100vh",background:T.bg,display:"flex",flexDirection:"column",fontFamily:T.font,overflowX:"hidden"}});
+
+  // Nav
+  const nav = div({style:{background:T.bg2,borderBottom:`1px solid ${T.border}`,padding:"14px 24px",display:"flex",alignItems:"center",gap:"12px"}});
+  nav.appendChild(btn({style:{background:"none",border:`1px solid ${T.border}`,color:T.textMid,padding:"6px 14px",borderRadius:"6px",cursor:"pointer",fontSize:"12px",fontFamily:"'Cinzel',serif",letterSpacing:"1px"},onClick:()=>setState({view:"landing"})}, "← HOME"));
+  nav.appendChild(span({style:{color:T.gold,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"18px",marginLeft:"8px"}}, "SHOPKEEPER PORTAL"));
+  root.appendChild(nav);
+
+  const body = div({style:{flex:"1",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}});
+  const card = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"40px",width:"100%",maxWidth:"420px",boxShadow:"0 20px 60px rgba(0,0,0,.8)"}});
+
+  // Tabs
+  const tabRow = div({style:{display:"flex",background:T.bg2,borderRadius:"8px",padding:"4px",marginBottom:"28px",border:`1px solid ${T.border}`}});
+  ["login","register"].forEach(t=>{
+    const active = STATE.shopkeeperAuthTab===t;
+    const tb = btn({style:{flex:"1",padding:"10px",borderRadius:"6px",border:"none",cursor:"pointer",fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"12px",letterSpacing:"1px",transition:"all .2s",background:active?`linear-gradient(135deg,${T.goldDim},${T.gold})`:"transparent",color:active?"#0a0800":T.textDim},
+      onClick:()=>setState({shopkeeperAuthTab:t,shopkeeperErr:""})},
+      t==="login"?"LOGIN":"REGISTER");
+    tabRow.appendChild(tb);
+  });
+  card.appendChild(tabRow);
+
+  if(STATE.shopkeeperErr) {
+    card.appendChild(div({style:{background:"#3a0808",border:"1px solid #8b2020",color:"#f87171",padding:"10px 14px",borderRadius:"8px",marginBottom:"16px",fontSize:"13px"}}, STATE.shopkeeperErr));
+  }
+
+  if(STATE.shopkeeperAuthTab==="login") {
+    let logId=STATE.shopkeeperLogId, logPw=STATE.shopkeeperLogPw;
+    const fId = field("Shop ID", logId, v=>{ STATE.shopkeeperLogId=v; }, "e.g. SHOP001");
+    const fPw = field("Password", logPw, v=>{ STATE.shopkeeperLogPw=v; }, "Your password", "password");
+    card.appendChild(fId);
+    card.appendChild(fPw);
+    card.appendChild(goldBtn("LOGIN TO DASHBOARD", async ()=>{
+      const inputId = sanitize(STATE.shopkeeperLogId.trim().toUpperCase());
+      if(isRateLimited(inputId)) {
+        setState({shopkeeperErr:"Too many failed attempts. Please wait 15 minutes."});
+        return;
+      }
+      const s = STATE.shops.find(x=>x.id===inputId);
+      if(!s) { recordFailedLogin(inputId); setState({shopkeeperErr:"Shop ID not found"}); return; }
+      const inputHash = await hashPassword(STATE.shopkeeperLogPw);
+      if(s.passwordHash && s.passwordHash!==inputHash) {
+        recordFailedLogin(inputId);
+        setState({shopkeeperErr:"Incorrect password"});
+        return;
+      }
+      createSession(s.id);
+      setState({shopkeeperShop:s,view:"shopDashboard",shopkeeperTab:"inventory",shopkeeperErr:""});
+    }, {full:true}));
+    card.appendChild(p({style:{color:T.textDim,fontSize:"11px",textAlign:"center",marginTop:"12px"}},
+      "Demo — ID: ", span({style:{color:T.goldDim,fontFamily:T.fontMono}}, "SHOP001"), "   Pass: 1234"));
+  } else {
+    const reg = STATE.shopkeeperReg;
+    const fields = [
+      ["Shop Name","name","e.g. Priya Fashion House"],
+      ["Owner Name","owner","Your full name"],
+      ["Shop Address","address","Full address with city"],
+      ["Phone","phone","10-digit mobile number"],
+      ["Password","password","Set a strong password","password"],
+    ];
+    fields.forEach(([l,k,ph,t])=>{
+      card.appendChild(field(l, reg[k], v=>{ STATE.shopkeeperReg={...STATE.shopkeeperReg,[k]:v}; }, ph, t||"text"));
+    });
+    card.appendChild(goldBtn("CREATE SHOP PROFILE", async ()=>{
+      const r = STATE.shopkeeperReg;
+      if(!r.name||!r.owner||!r.address||!r.phone||!r.password) { setState({shopkeeperErr:"All fields are required"}); return; }
+      if(r.phone && !/^\d{10}$/.test(r.phone.trim())) { setState({shopkeeperErr:"Phone must be 10 digits"}); return; }
+      if(r.password.length < 6) { setState({shopkeeperErr:"Password must be at least 6 characters"}); return; }
+      const pwHash = await hashPassword(r.password);
+      const id = "SHOP"+String(STATE.shops.length+1).padStart(3,"0");
+      const newShop = {
+        id,
+        name: sanitize(r.name),
+        owner: sanitize(r.owner),
+        address: sanitize(r.address),
+        phone: sanitize(r.phone),
+        passwordHash: pwHash,
+        clothes:[]
+      };
+      STATE.shops.push(newShop);
+      createSession(newShop.id);
+      setState({shopkeeperShop:newShop,view:"shopDashboard",shopkeeperTab:"inventory",shopkeeperErr:""});
+    }, {full:true}));
+  }
+
+  body.appendChild(card);
+  root.appendChild(body);
+  return root;
+}
+
+// ─── SHOP DASHBOARD ──────────────────────────────────────────
+function renderShopDashboard() {
+  // Session guard — must have valid session
+  if(!SESSION_TOKEN || !SESSION_SHOP_ID || !STATE.shopkeeperShop || SESSION_SHOP_ID !== STATE.shopkeeperShop.id) {
+    destroySession();
+    setTimeout(()=>setState({view:"shopkeeper",shopkeeperErr:"Session expired. Please log in again."}),0);
+    return div({});
+  }
+  const shop = STATE.shopkeeperShop;
+  const root = div({style:{minHeight:"100vh",background:T.bg,fontFamily:T.font,display:"flex",flexDirection:"column",overflowX:"hidden"}});
+
+  // Top bar
+  const topBar = div({style:{background:T.bg2,borderBottom:`1px solid ${T.border}`,padding:"14px 24px"}});
+  const topInner = div({style:{display:"flex",alignItems:"center",gap:"12px",maxWidth:"1100px",margin:"0 auto",flexWrap:"wrap"}});
+  topInner.appendChild(btn({style:{background:"none",border:`1px solid ${T.border}`,color:T.textMid,padding:"6px 14px",borderRadius:"6px",cursor:"pointer",fontSize:"12px",fontFamily:"'Cinzel',serif",letterSpacing:"1px"},onClick:()=>{destroySession();setState({view:"landing"});}},"← HOME"));
+  topInner.appendChild(btn({style:{background:"none",border:`1px solid ${T.red}55`,color:T.red,padding:"6px 14px",borderRadius:"6px",cursor:"pointer",fontSize:"12px",fontFamily:"'Cinzel',serif",letterSpacing:"1px"},onClick:()=>{if(confirm("Log out?")) {destroySession();setState({view:"shopkeeper",shopkeeperLogId:"",shopkeeperLogPw:"",shopkeeperErr:""});}}}, "🔒 LOGOUT"));
+  const shopInfo = div({});
+  shopInfo.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"18px"}}, shop.name));
+  shopInfo.appendChild(div({style:{color:T.textMid,fontSize:"11px"}}, `${shop.address} · ${shop.owner}`));
+  topInner.appendChild(shopInfo);
+  topInner.appendChild(div({style:{marginLeft:"auto",background:T.bg3,border:`1px solid ${T.borderGold}`,color:T.gold,padding:"6px 16px",borderRadius:"20px",fontSize:"12px",fontFamily:T.fontMono,fontWeight:"700",letterSpacing:"2px"}}, shop.id));
+  topBar.appendChild(topInner);
+  root.appendChild(topBar);
+
+  // Tab bar
+  const tabBar = div({style:{background:T.bg2,borderBottom:`1px solid ${T.border}`,padding:"0 24px",overflowX:"auto"}});
+  const tabInner = div({style:{display:"flex",gap:"0",maxWidth:"1100px",margin:"0 auto"}});
+  const tabs = [{id:"inventory",label:"INVENTORY"},{id:"upload",label:"ADD ITEM"},{id:"qr",label:"MY QR CODE"},{id:"analytics",label:"ANALYTICS"}];
+  tabs.forEach(t=>{
+    const active=STATE.shopkeeperTab===t.id;
+    tabInner.appendChild(btn({style:{padding:"14px 22px",background:"none",border:"none",borderBottom:`2px solid ${active?T.gold:"transparent"}`,color:active?T.goldLight:T.textDim,cursor:"pointer",fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"12px",letterSpacing:"1.5px",transition:"all .2s",whiteSpace:"nowrap"},
+      onClick:()=>setState({shopkeeperTab:t.id,uploadPhase:"choose",uploadPreview:null,uploadEdited:null,uploadCamError:""})}, t.label));
+  });
+  tabBar.appendChild(tabInner);
+  root.appendChild(tabBar);
+
+  const content = div({style:{flex:"1",maxWidth:"1100px",margin:"0 auto",padding:"28px",width:"100%"}});
+  const tab = STATE.shopkeeperTab;
+  if(tab==="inventory") content.appendChild(renderInventory(shop));
+  else if(tab==="upload") content.appendChild(renderUpload(shop));
+  else if(tab==="qr") content.appendChild(renderQRSection(shop));
+  else if(tab==="analytics") content.appendChild(renderAnalytics(shop));
+  root.appendChild(content);
+  return root;
+}
+
+function updateShopInState(updatedShop) {
+  STATE.shopkeeperShop = updatedShop;
+  STATE.shops = STATE.shops.map(s=>s.id===updatedShop.id?updatedShop:s);
+  saveShops(STATE.shops);
+}
+
+function renderInventory(shop) {
+  const wrap = div({});
+  const topRow = div({style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px",flexWrap:"wrap",gap:"12px"}});
+  const info = div({});
+  info.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"22px",fontWeight:"700",marginBottom:"4px"}}, "Collection"));
+  info.appendChild(p({style:{color:T.textMid,fontSize:"13px"}}, `${shop.clothes.length} items in your shop`));
+  topRow.appendChild(info);
+  topRow.appendChild(goldBtn("+ ADD NEW ITEM", ()=>setState({shopkeeperTab:"upload",uploadPhase:"choose",uploadPreview:null,uploadEdited:null,uploadCamError:""}), {small:true}));
+  wrap.appendChild(topRow);
+
+  const byAge = shop.clothes.reduce((a,c)=>{a[c.ageGroup]=(a[c.ageGroup]||0)+1;return a},{});
+  const pillRow = div({style:{display:"flex",gap:"8px",marginBottom:"24px",flexWrap:"wrap"}});
+  pillRow.appendChild(filterPill("All", shop.clothes.length, STATE.inventoryAgeFilter==="all", T.gold, ()=>setState({inventoryAgeFilter:"all"})));
+  Object.entries(byAge).forEach(([age,cnt])=>{
+    pillRow.appendChild(filterPill(AGE_LABEL[age]||age, cnt, STATE.inventoryAgeFilter===age, AGE_COLOR[age], ()=>setState({inventoryAgeFilter:age})));
+  });
+  wrap.appendChild(pillRow);
+
+  const filtered = STATE.inventoryAgeFilter==="all"?shop.clothes:shop.clothes.filter(c=>c.ageGroup===STATE.inventoryAgeFilter);
+
+  if(filtered.length===0) {
+    const empty = div({style:{textAlign:"center",padding:"60px",color:T.textDim,fontStyle:"italic"}});
+    const addLink = span({style:{color:T.gold,cursor:"pointer"}}, "Add your first item →");
+    addLink.addEventListener("click",()=>setState({shopkeeperTab:"upload"}));
+    empty.append("No items yet. ", addLink);
+    wrap.appendChild(empty);
+  } else {
+    const grid = div({style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"16px"}});
+    filtered.forEach(item=>{
+      grid.appendChild(clothCard(item, ()=>{
+        if(!confirm("Remove this item?")) return;
+        const updated = {...shop,clothes:shop.clothes.filter(c=>c.id!==item.id)};
+        updateShopInState(updated);
+        render();
+      }));
+    });
+    wrap.appendChild(grid);
+  }
+  return wrap;
+}
+
+// ─── UPLOAD ──────────────────────────────────────────────────
+function renderUpload(shop) {
+  const phase = STATE.uploadPhase;
+
+  if(phase==="choose") {
+    const wrap = div({style:{maxWidth:"560px",margin:"0 auto"}});
+    wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"22px",marginBottom:"6px"}}, "Add New Item"));
+    wrap.appendChild(p({style:{color:T.textMid,fontSize:"13px",marginBottom:"28px"}}, "Take a photo or upload from gallery. AI will auto-detect details."));
+
+    if(STATE.uploadCamError) {
+      const errBox = div({style:{background:"#200a0a",border:"1px solid #7a1a1a",borderRadius:"10px",padding:"16px",marginBottom:"20px"}});
+      errBox.appendChild(div({style:{color:"#f87171",fontSize:"13px",lineHeight:"1.6",marginBottom:"12px"}}, STATE.uploadCamError));
+      errBox.appendChild(goldBtn("Try Again", ()=>startUploadCamera(shop), {small:true}));
+      wrap.appendChild(errBox);
+    }
+
+    const grid = div({style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px"}});
+
+    const takeCard = div({className:"card-hover",style:{background:T.bg3,border:`2px dashed ${T.border}`,borderRadius:"14px",padding:"36px",textAlign:"center",cursor:"pointer"}});
+    takeCard.appendChild(div({style:{fontSize:"48px",marginBottom:"12px"}}, "📸"));
+    takeCard.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",marginBottom:"6px"}}, "TAKE PHOTO"));
+    takeCard.appendChild(div({style:{color:T.textDim,fontSize:"12px"}}, "Click dress photo with camera"));
+    takeCard.addEventListener("click",()=>startUploadCamera(shop));
+    grid.appendChild(takeCard);
+
+    const fileInput = inp({type:"file",accept:"image/*",style:{display:"none"}});
+    fileInput.addEventListener("change",e=>{
+      const file=e.target.files?.[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=ev=>analyzePhoto(ev.target.result,shop);
+      reader.readAsDataURL(file);
+    });
+
+    const uploadCard = div({className:"card-hover",style:{background:T.bg3,border:`2px dashed ${T.border}`,borderRadius:"14px",padding:"36px",textAlign:"center",cursor:"pointer"}});
+    uploadCard.appendChild(div({style:{fontSize:"48px",marginBottom:"12px"}}, "🖼️"));
+    uploadCard.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",marginBottom:"6px"}}, "UPLOAD PHOTO"));
+    uploadCard.appendChild(div({style:{color:T.textDim,fontSize:"12px"}}, "Select from device gallery"));
+    uploadCard.appendChild(fileInput);
+    uploadCard.addEventListener("click",()=>fileInput.click());
+    grid.appendChild(uploadCard);
+    wrap.appendChild(grid);
+
+    const tip = div({style:{marginTop:"20px",padding:"14px 18px",background:T.bg2,borderRadius:"10px",border:`1px solid ${T.border}`}});
+    tip.appendChild(div({style:{color:T.textMid,fontSize:"12px",lineHeight:"1.6"}},
+      "💡 ", el("strong",{style:{color:T.gold}}, "Tip:"), " AI will automatically detect the clothing type, age group it suits, suggested price, and available sizes."));
+    wrap.appendChild(tip);
+    return wrap;
+  }
+
+  if(phase==="camera") {
+    const wrap = div({style:{maxWidth:"560px",margin:"0 auto"}});
+    wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"20px",marginBottom:"16px"}}, "Position the garment"));
+    const vWrap = div({style:{position:"relative",borderRadius:"14px",overflow:"hidden",background:"#000",marginBottom:"16px",minHeight:"320px"}});
+    const video = el("video",{id:"uploadVideo",autoplay:"",playsinline:"",muted:"",style:{width:"100%",display:"block",borderRadius:"14px"}});
+    vWrap.appendChild(video);
+    vWrap.appendChild(div({style:{position:"absolute",inset:"0",pointerEvents:"none",display:"flex",alignItems:"center",justifyContent:"center"}},
+      div({style:{border:`2px dashed ${T.gold}88`,borderRadius:"8px",width:"70%",height:"80%"}})));
+    vWrap.appendChild(div({style:{position:"absolute",bottom:"12px",left:"0",right:"0",textAlign:"center",color:T.gold,fontSize:"12px",fontFamily:"'Cinzel',serif",letterSpacing:"1px"}}, "PLACE GARMENT IN FRAME"));
+    wrap.appendChild(vWrap);
+    const btns = div({style:{display:"flex",gap:"12px"}});
+    btns.appendChild(goldBtn("← BACK", ()=>{
+      uploadStream?.getTracks().forEach(t=>t.stop()); uploadStream=null;
+      setState({uploadPhase:"choose"});
+    }, {outline:true}));
+    btns.appendChild(goldBtn("📷 CAPTURE PHOTO", ()=>{
+      const v=document.getElementById("uploadVideo");
+      const canvas=document.createElement("canvas");
+      canvas.width=v.videoWidth||640; canvas.height=v.videoHeight||480;
+      canvas.getContext("2d").drawImage(v,0,0);
+      const dataUrl=canvas.toDataURL("image/jpeg",.85);
+      uploadStream?.getTracks().forEach(t=>t.stop()); uploadStream=null;
+      analyzePhoto(dataUrl, shop);
+    }, {full:true}));
+    wrap.appendChild(btns);
+
+    // Attach stream after render
+    setTimeout(()=>{
+      const v=document.getElementById("uploadVideo");
+      if(v && uploadStream) { v.srcObject=uploadStream; v.play().catch(()=>{}); }
+    }, 50);
+    return wrap;
+  }
+
+  if(phase==="processing") {
+    const wrap = div({style:{maxWidth:"560px",margin:"0 auto",textAlign:"center",padding:"60px"}});
+    if(STATE.uploadPreview) wrap.appendChild(el("img",{src:STATE.uploadPreview,alt:"",style:{width:"160px",height:"180px",objectFit:"cover",borderRadius:"12px",marginBottom:"24px",border:`1px solid ${T.border}`}}));
+    wrap.appendChild(div({style:{width:"50px",height:"50px",border:`3px solid ${T.border}`,borderTopColor:T.gold,borderRadius:"50%",margin:"0 auto 20px",animation:"spin 1s linear infinite"}}));
+    wrap.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"18px",marginBottom:"8px"}}, "AI Analysing..."));
+    wrap.appendChild(div({style:{color:T.textMid,fontSize:"13px"}}, "Detecting type · age group · price · sizes"));
+    return wrap;
+  }
+
+  if(phase==="review" && STATE.uploadEdited) {
+    const edited = STATE.uploadEdited;
+    const wrap = div({style:{maxWidth:"600px",margin:"0 auto"}});
+    wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"20px",marginBottom:"4px"}}, "Review & Confirm"));
+    wrap.appendChild(p({style:{color:T.textMid,fontSize:"13px",marginBottom:"20px"}}, "AI has detected the details below. Edit anything before saving."));
+
+    const detailBox = div({style:{display:"grid",gridTemplateColumns:"160px 1fr",gap:"20px",background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"14px",padding:"20px",marginBottom:"20px"}});
+    const imgCol = div({});
+    if(STATE.uploadPreview) imgCol.appendChild(el("img",{src:STATE.uploadPreview,alt:"",style:{width:"100%",height:"180px",objectFit:"cover",borderRadius:"10px",border:`1px solid ${T.border}`}}));
+    else {
+      const svgWrap = div({style:{width:"100%",height:"180px",background:edited.color+"22",borderRadius:"10px",display:"flex",alignItems:"center",justifyContent:"center"}});
+      svgWrap.appendChild(el("img",{src:typeSVG(edited.type,edited.color),alt:"",style:{height:"140px"}}));
+      imgCol.appendChild(svgWrap);
+    }
+    imgCol.appendChild(div({style:{marginTop:"8px",textAlign:"center"}},
+      span({style:{background:"#1a3a1a",color:"#50c878",border:"1px solid #2a6a2a",padding:"3px 10px",borderRadius:"20px",fontSize:"10px",fontFamily:"'Cinzel',serif",letterSpacing:"1px"}}, "🤖 AI DETECTED")));
+    detailBox.appendChild(imgCol);
+
+    const formCol = div({});
+    formCol.appendChild(field("Name", edited.name, v=>{ STATE.uploadEdited={...STATE.uploadEdited,name:v}; render(); }, "Clothing name"));
+
+    const twoCol = div({style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}});
+    // Type select
+    const typeWrap = div({style:{marginBottom:"16px"}});
+    typeWrap.appendChild(el("label",{style:{display:"block",color:T.textMid,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:"6px"}}, "TYPE"));
+    const typeSelect = el("select",{style:{width:"100%",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:"6px",color:T.text,padding:"10px 12px",fontSize:"14px",fontFamily:T.font}});
+    ["dress","top","bottom","jacket","other"].forEach(t=>{
+      const o=el("option",{value:t},t); if(t===edited.type) o.selected=true;
+      typeSelect.appendChild(o);
+    });
+    typeSelect.addEventListener("change",e=>{ STATE.uploadEdited={...STATE.uploadEdited,type:e.target.value}; });
+    typeWrap.appendChild(typeSelect);
+    twoCol.appendChild(typeWrap);
+
+    // Age select
+    const ageWrap = div({style:{marginBottom:"16px"}});
+    ageWrap.appendChild(el("label",{style:{display:"block",color:T.textMid,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:"6px"}}, "AGE GROUP"));
+    const ageSelect = el("select",{style:{width:"100%",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:"6px",color:T.text,padding:"10px 12px",fontSize:"14px",fontFamily:T.font}});
+    ["kids","teen","adult","senior"].forEach(a=>{
+      const o=el("option",{value:a},a); if(a===edited.ageGroup) o.selected=true;
+      ageSelect.appendChild(o);
+    });
+    ageSelect.addEventListener("change",e=>{ STATE.uploadEdited={...STATE.uploadEdited,ageGroup:e.target.value}; });
+    ageWrap.appendChild(ageSelect);
+    twoCol.appendChild(ageWrap);
+    formCol.appendChild(twoCol);
+    formCol.appendChild(field("Price (₹)", String(edited.price), v=>{ STATE.uploadEdited={...STATE.uploadEdited,price:Number(v)||0}; }, "e.g. 1299"));
+    detailBox.appendChild(formCol);
+    wrap.appendChild(detailBox);
+
+    wrap.appendChild(field("Description", edited.desc, v=>{ STATE.uploadEdited={...STATE.uploadEdited,desc:v}; }, "Brief description of the item"));
+    wrap.appendChild(field("Sizes (comma-separated)", (edited.sizes||[]).join(","), v=>{ STATE.uploadEdited={...STATE.uploadEdited,sizes:v.split(",").map(s=>s.trim()).filter(Boolean)}; }, "e.g. S,M,L,XL or 28,30,32"));
+    wrap.appendChild(divider());
+
+    const btns = div({style:{display:"flex",gap:"12px"}});
+    btns.appendChild(goldBtn("DISCARD", ()=>setState({uploadPhase:"choose",uploadPreview:null,uploadEdited:null}), {outline:true}));
+    btns.appendChild(goldBtn("✓ SAVE TO INVENTORY", ()=>{
+      const e = STATE.uploadEdited;
+      if(!e || !e.name.trim()) { alert("Item name is required."); return; }
+      if(isNaN(e.price) || e.price < 0) { alert("Invalid price."); return; }
+      const safeItem = {
+        ...e,
+        id: sanitize(e.id),
+        name: sanitize(e.name),
+        desc: sanitize(e.desc),
+        type: sanitize(e.type),
+        ageGroup: sanitize(e.ageGroup),
+        price: Math.max(0, Math.floor(Number(e.price)||0)),
+        sizes: (e.sizes||[]).map(s=>sanitize(s)).filter(Boolean),
+      };
+      const updated = {...shop,clothes:[...shop.clothes, safeItem]};
+      updateShopInState(updated);
+      setState({uploadPhase:"done"});
+    }, {full:true}));
+    wrap.appendChild(btns);
+    return wrap;
+  }
+
+  if(phase==="done") {
+    const wrap = div({style:{maxWidth:"500px",margin:"0 auto",textAlign:"center",padding:"60px"}});
+    wrap.appendChild(div({style:{fontSize:"60px",marginBottom:"16px"}}, "✅"));
+    wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"24px",marginBottom:"8px"}}, "Item Added!"));
+    wrap.appendChild(p({style:{color:T.textMid,marginBottom:"28px"}}, "The item has been added to your collection."));
+    const btns = div({style:{display:"flex",gap:"12px",justifyContent:"center"}});
+    btns.appendChild(goldBtn("ADD ANOTHER", ()=>setState({uploadPhase:"choose",uploadPreview:null,uploadEdited:null}), {outline:true}));
+    btns.appendChild(goldBtn("VIEW INVENTORY", ()=>setState({shopkeeperTab:"inventory"})));
+    wrap.appendChild(btns);
+    return wrap;
+  }
+
+  return div({});
+}
+
+async function startUploadCamera(shop) {
+  setState({uploadCamError:""});
+  if(uploadStream) { uploadStream.getTracks().forEach(t=>t.stop()); uploadStream=null; }
+  const attempts = [
+    {video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false},
+    {video:{facingMode:{ideal:"environment"}},audio:false},
+    {video:{facingMode:"environment"},audio:false},
+    {video:true,audio:false},
+  ];
+  let lastErr = null;
+  for(const constraints of attempts) {
+    try {
+      uploadStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setState({uploadPhase:"camera"});
+      return;
+    } catch(e) {
+      lastErr = e;
+      if(e.name==="NotAllowedError"||e.name==="PermissionDeniedError") break;
+    }
+  }
+  const e = lastErr;
+  let msg = "";
+  if(e.name==="NotAllowedError"||e.name==="PermissionDeniedError") {
+    msg = "Camera blocked. To fix: click the 🔒 icon in your browser address bar → select Allow Camera → then tap Try Again.";
+  } else if(e.name==="NotFoundError"||e.name==="DevicesNotFoundError") {
+    msg = "No camera found on this device. Please upload a photo instead.";
+  } else if(e.name==="NotReadableError"||e.name==="TrackStartError") {
+    msg = "Camera is in use by another app. Close other apps using the camera and try again.";
+  } else {
+    msg = "Camera error: " + (e.message||e.name) + ". Try uploading a photo instead.";
+  }
+  setState({uploadCamError:msg,uploadPhase:"choose"});
+}
+
+async function analyzePhoto(dataUrl, shop) {
+  setState({uploadPreview:dataUrl,uploadPhase:"processing"});
+  const base64 = dataUrl.split(",")[1];
+  const result = await aiAnalyzeCloth(base64);
+  if(result) {
+    const item = {id:"C"+Date.now(),photo:dataUrl,...result};
+    setState({uploadAiData:item,uploadEdited:item,uploadPhase:"review"});
+  } else {
+    const fallback = {id:"C"+Date.now(),photo:dataUrl,name:"",type:"dress",ageGroup:"adult",price:999,color:"#c9a84c",desc:"",sizes:["S","M","L"]};
+    setState({uploadAiData:fallback,uploadEdited:fallback,uploadPhase:"review"});
+  }
+}
+
+// ─── QR SECTION ──────────────────────────────────────────────
+function renderQRSection(shop) {
+  const wrap = div({style:{maxWidth:"500px",margin:"0 auto",textAlign:"center"}});
+  wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"22px",marginBottom:"6px"}}, "Your Shop QR Code"));
+  wrap.appendChild(p({style:{color:T.textMid,fontSize:"13px",marginBottom:"32px"}}, "Print and display this at your shop entrance. Customers scan to browse your collection instantly."));
+
+  const qrBox = div({style:{background:"#fff",borderRadius:"20px",padding:"32px",display:"inline-block",boxShadow:`0 0 0 1px ${T.border}, 0 20px 60px rgba(201,168,76,.25)`,marginBottom:"28px"}});
+  const qrContainer = div({style:{width:"200px",height:"200px",display:"flex",alignItems:"center",justifyContent:"center"}});
+  qrBox.appendChild(qrContainer);
+  qrBox.appendChild(div({style:{marginTop:"14px",fontFamily:T.fontMono,fontSize:"22px",fontWeight:"900",color:"#0a0800",letterSpacing:"4px"}}, shop.id));
+  qrBox.appendChild(div({style:{fontSize:"13px",color:"#5a4a2e",marginTop:"4px",fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic"}}, shop.name));
+  wrap.appendChild(qrBox);
+
+  const howBox = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"14px",padding:"24px",textAlign:"left"}});
+  howBox.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",marginBottom:"14px"}}, "📌 HOW IT WORKS"));
+  [
+    ["1","Print the QR code and place it at your shop entrance"],
+    ["2","Customer taps 'Scan QR Code' on FitStore and points their camera at the QR"],
+    ["3","The shop opens automatically — no typing needed"],
+    ["4","They can also enter the Shop ID manually as a backup"],
+    ["5","AI recommends exact sizes based on their body measurements"],
+  ].forEach(([n,t])=>{
+    const row = div({style:{display:"flex",gap:"12px",marginBottom:"10px",alignItems:"flex-start"}});
+    row.appendChild(span({style:{background:T.gold,color:"#0a0800",width:"22px",height:"22px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",fontWeight:"900",fontFamily:"'Cinzel',serif",flexShrink:"0"}}, n));
+    row.appendChild(span({style:{color:T.textMid,fontSize:"13px",lineHeight:"1.5"}}, t));
+    howBox.appendChild(row);
+  });
+  wrap.appendChild(howBox);
+
+  // Draw real QR code after DOM insert
+  setTimeout(()=>drawQR(qrContainer, shop.id, 200), 80);
+  return wrap;
+}
+
+// ─── ANALYTICS ───────────────────────────────────────────────
+function renderAnalytics(shop) {
+  const byAge = shop.clothes.reduce((a,c)=>{a[c.ageGroup]=(a[c.ageGroup]||0)+1;return a},{});
+  const byType = shop.clothes.reduce((a,c)=>{a[c.type]=(a[c.type]||0)+1;return a},{});
+  const total = shop.clothes.length;
+  const totalValue = shop.clothes.reduce((s,c)=>s+c.price,0);
+
+  const wrap = div({});
+  wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"22px",marginBottom:"20px"}}, "Analytics"));
+
+  const kpiGrid = div({style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"16px",marginBottom:"28px"}});
+  [{label:"Total Items",value:total,icon:"👗"},{label:"Total Value",value:`₹${totalValue.toLocaleString()}`,icon:"💰"},{label:"Age Groups",value:Object.keys(byAge).length,icon:"👥"},{label:"Clothing Types",value:Object.keys(byType).length,icon:"🏷️"}].forEach(kpi=>{
+    const kpiCard = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"20px"}});
+    kpiCard.appendChild(div({style:{fontSize:"28px",marginBottom:"8px"}}, kpi.icon));
+    kpiCard.appendChild(div({style:{color:T.gold,fontFamily:"'Cinzel',serif",fontWeight:"800",fontSize:"26px",marginBottom:"4px"}}, String(kpi.value)));
+    kpiCard.appendChild(div({style:{color:T.textMid,fontSize:"12px",letterSpacing:".5px"}}, kpi.label));
+    kpiGrid.appendChild(kpiCard);
+  });
+  wrap.appendChild(kpiGrid);
+
+  const charts = div({style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"20px"}});
+
+  const ageChart = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"20px"}});
+  ageChart.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",marginBottom:"16px",fontSize:"13px",letterSpacing:"1px"}}, "BY AGE GROUP"));
+  Object.entries(byAge).forEach(([age,cnt])=>{
+    const row = div({style:{marginBottom:"14px"}});
+    const labelRow = div({style:{display:"flex",justifyContent:"space-between",marginBottom:"5px"}});
+    labelRow.appendChild(span({style:{color:T.text,fontSize:"13px"}}, AGE_LABEL[age]||age));
+    labelRow.appendChild(span({style:{color:AGE_COLOR[age],fontWeight:"700",fontSize:"13px"}}, String(cnt)));
+    row.appendChild(labelRow);
+    const barBg = div({style:{background:T.bg2,borderRadius:"3px",height:"6px",overflow:"hidden"}});
+    barBg.appendChild(div({style:{background:AGE_COLOR[age],height:"100%",width:`${(cnt/total)*100}%`,borderRadius:"3px",transition:"width 1s ease"}}));
+    row.appendChild(barBg);
+    ageChart.appendChild(row);
+  });
+  charts.appendChild(ageChart);
+
+  const typeChart = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"20px"}});
+  typeChart.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",marginBottom:"16px",fontSize:"13px",letterSpacing:"1px"}}, "BY TYPE"));
+  Object.entries(byType).forEach(([type,cnt])=>{
+    const row = div({style:{marginBottom:"14px"}});
+    const labelRow = div({style:{display:"flex",justifyContent:"space-between",marginBottom:"5px"}});
+    labelRow.appendChild(span({style:{color:T.text,fontSize:"13px",textTransform:"capitalize"}}, type));
+    labelRow.appendChild(span({style:{color:T.gold,fontWeight:"700",fontSize:"13px"}}, String(cnt)));
+    row.appendChild(labelRow);
+    const barBg = div({style:{background:T.bg2,borderRadius:"3px",height:"6px",overflow:"hidden"}});
+    barBg.appendChild(div({style:{background:`linear-gradient(90deg,${T.goldDim},${T.gold})`,height:"100%",width:`${(cnt/total)*100}%`,borderRadius:"3px",transition:"width 1s ease"}}));
+    row.appendChild(barBg);
+    typeChart.appendChild(row);
+  });
+  charts.appendChild(typeChart);
+  wrap.appendChild(charts);
+  return wrap;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   CUSTOMER PORTAL
+// ═══════════════════════════════════════════════════════════════
+function renderCustomerPortal() {
+  const shop = STATE.custShop;
+  const root = div({style:{minHeight:"100vh",background:T.bg,fontFamily:T.font,display:"flex",flexDirection:"column",overflowX:"hidden"}});
+
+  const topBar = div({style:{background:T.bg2,borderBottom:`1px solid ${T.border}`,padding:"14px 20px",display:"flex",alignItems:"center",gap:"12px"}});
+  topBar.appendChild(btn({style:{background:"none",border:`1px solid ${T.border}`,color:T.textMid,padding:"6px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"12px",fontFamily:"'Cinzel',serif",letterSpacing:"1px",whiteSpace:"nowrap"},onClick:()=>setState({view:"landing"})}, "← BACK"));
+  const shopInfo = div({style:{overflow:"hidden"}});
+  shopInfo.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"16px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, shop.name));
+  shopInfo.appendChild(div({style:{color:T.textMid,fontSize:"11px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, `📍 ${shop.address}`));
+  topBar.appendChild(shopInfo);
+  topBar.appendChild(div({style:{marginLeft:"auto",background:T.bg3,border:`1px solid ${T.borderGold}44`,color:T.goldDim,padding:"4px 12px",borderRadius:"20px",fontSize:"10px",fontFamily:T.fontMono,whiteSpace:"nowrap"}}, shop.id));
+  root.appendChild(topBar);
+
+  const tabBar = div({style:{background:T.bg2,borderBottom:`1px solid ${T.border}`,display:"flex"}});
+  [["browse","🛍️ BROWSE"],["fit","📏 MY FIT"],["ar","🪞 AR TRY-ON"]].forEach(([id,label])=>{
+    const active=STATE.customerTab===id;
+    tabBar.appendChild(btn({style:{flex:"1",padding:"13px 8px",background:"none",border:"none",borderBottom:`2px solid ${active?T.gold:"transparent"}`,color:active?T.goldLight:T.textDim,cursor:"pointer",fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"11px",letterSpacing:"1px",transition:"all .2s"},
+      onClick:()=>setState({customerTab:id})}, label));
+  });
+  root.appendChild(tabBar);
+
+  const content = div({style:{flex:"1",maxWidth:"800px",margin:"0 auto",padding:"20px 16px",width:"100%"}});
+  const tab=STATE.customerTab;
+  if(tab==="browse") content.appendChild(renderCustomerBrowse(shop));
+  else if(tab==="fit") content.appendChild(renderCustomerFit(shop));
+  else if(tab==="ar") content.appendChild(renderCustomerAR(shop));
+  root.appendChild(content);
+  return root;
+}
+
+function renderCustomerBrowse(shop) {
+  const wrap = div({});
+  wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"20px",marginBottom:"4px"}}, "Browse Collection"));
+  wrap.appendChild(p({style:{color:T.textMid,fontSize:"13px",marginBottom:"8px"}}, `${shop.clothes.length} items available · ${shop.name}`));
+  // Payment security notice
+  const payNotice = div({style:{background:"#0a1a0a",border:"1px solid #1a5a1a",borderRadius:"8px",padding:"8px 14px",marginBottom:"16px",display:"flex",gap:"8px",alignItems:"center"}});
+  payNotice.appendChild(span({style:{fontSize:"14px"}}, "🔒"));
+  payNotice.appendChild(span({style:{color:"#50c878",fontSize:"11px"}}, "Payments are processed securely by the shopkeeper at the counter. Never share card/UPI details in this app."));
+  wrap.appendChild(payNotice);
+
+  const byAge = shop.clothes.reduce((a,c)=>{a[c.ageGroup]=(a[c.ageGroup]||0)+1;return a},{});
+  const pillRow = div({style:{display:"flex",gap:"8px",marginBottom:"20px",overflowX:"auto",paddingBottom:"4px"}});
+  pillRow.appendChild(filterPill("All", shop.clothes.length, STATE.browseAgeFilter==="all", T.gold, ()=>setState({browseAgeFilter:"all"})));
+  Object.entries(byAge).forEach(([age,cnt])=>{
+    pillRow.appendChild(filterPill(AGE_LABEL[age]||age, cnt, STATE.browseAgeFilter===age, AGE_COLOR[age], ()=>setState({browseAgeFilter:age})));
+  });
+  wrap.appendChild(pillRow);
+
+  const filtered = STATE.browseAgeFilter==="all"?shop.clothes:shop.clothes.filter(c=>c.ageGroup===STATE.browseAgeFilter);
+  const grid = div({style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:"14px"}});
+  filtered.forEach(item=>grid.appendChild(clothCard(item, null)));
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+function renderCustomerFit(shop) {
+  const wrap = div({});
+  wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"20px",marginBottom:"4px"}}, "Find Your Perfect Fit"));
+  wrap.appendChild(p({style:{color:T.textMid,fontSize:"13px",marginBottom:"24px"}}, `Enter your measurements — AI will recommend the right size from ${shop.name}`));
+
+  const formBox = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"14px",padding:"24px",marginBottom:"20px"}});
+  const threeCol = div({style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"14px"}});
+  [["Height (cm)","height","165"],["Weight (kg)","weight","60"],["Age (yrs)","age","25"]].forEach(([l,k,ph])=>{
+    const col = div({});
+    col.appendChild(el("label",{style:{display:"block",color:T.textMid,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:"6px"}}, l));
+    const input = inp({type:"number",value:STATE.fitForm[k],placeholder:ph,style:{width:"100%",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:"6px",color:T.text,padding:"10px 12px",fontSize:"15px",fontFamily:T.font}});
+    input.addEventListener("input",e=>{ STATE.fitForm={...STATE.fitForm,[k]:e.target.value}; });
+    col.appendChild(input);
+    threeCol.appendChild(col);
+  });
+  formBox.appendChild(threeCol);
+  formBox.appendChild(div({style:{marginTop:"18px"}},
+    goldBtn(STATE.fitLoading?"🤖 Analysing...":"GET SIZE RECOMMENDATIONS", async ()=>{
+      const f=STATE.fitForm;
+      if(!f.height||!f.weight||!f.age){alert("Please enter height, weight and age.");return;}
+      setState({fitLoading:true,fitDone:false});
+      const result = await aiSizeRecommend(f.height,f.weight,f.age,shop.clothes);
+      setState({fitRecs:result,fitLoading:false,fitDone:true});
+    }, {full:true,disabled:STATE.fitLoading})
+  ));
+  wrap.appendChild(formBox);
+
+  if(STATE.fitDone && STATE.fitRecs.length>0) {
+    wrap.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"16px",marginBottom:"14px"}}, "✨ Your Personalised Recommendations"));
+    const recList = div({style:{display:"flex",flexDirection:"column",gap:"12px"}});
+    STATE.fitRecs.forEach(rec=>{
+      const item=shop.clothes.find(c=>c.id===rec.id);
+      if(!item) return;
+      const fitColor=rec.fit==="Perfect fit"?T.green:rec.fit==="Slightly loose"?"#60a5fa":"#f59e0b";
+      const row = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"16px",display:"flex",gap:"14px",alignItems:"center"}});
+      const thumb = div({style:{width:"65px",height:"80px",background:item.color+"22",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:"0",overflow:"hidden"}});
+      if(item.photo) thumb.appendChild(el("img",{src:item.photo,alt:"",style:{width:"100%",height:"100%",objectFit:"cover"}}));
+      else thumb.appendChild(el("img",{src:typeSVG(item.type,item.color),alt:"",style:{height:"60px"}}));
+      row.appendChild(thumb);
+      const info = div({style:{flex:"1"}});
+      info.appendChild(div({style:{color:T.text,fontWeight:"700",fontSize:"14px",marginBottom:"4px",fontFamily:"'Cinzel',serif"}}, item.name));
+      const badges = div({style:{display:"flex",gap:"8px",marginBottom:"6px",flexWrap:"wrap",alignItems:"center"}});
+      badges.appendChild(span({style:{background:T.gold+"22",color:T.gold,border:`1px solid ${T.gold}44`,padding:"3px 12px",borderRadius:"20px",fontSize:"12px",fontWeight:"800",fontFamily:"'Cinzel',serif"}}, `Size: ${rec.size}`));
+      badges.appendChild(span({style:{background:fitColor+"22",color:fitColor,border:`1px solid ${fitColor}44`,padding:"3px 12px",borderRadius:"20px",fontSize:"11px"}}, rec.fit));
+      badges.appendChild(span({style:{color:T.gold,fontWeight:"800",fontSize:"15px",fontFamily:"'Cinzel',serif"}}, `₹${item.price}`));
+      info.appendChild(badges);
+      info.appendChild(div({style:{color:T.textMid,fontSize:"12px"}}, rec.note));
+      row.appendChild(info);
+      recList.appendChild(row);
+    });
+    wrap.appendChild(recList);
+  }
+  return wrap;
+}
+
+function renderCustomerAR(shop) {
+  const camState = STATE.arCamState;
+
+  if(camState==="active" && STATE.arSelected) {
+    const selected = STATE.arSelected;
+    const wrap = div({style:{position:"relative"}});
+
+    // Header
+    const header = div({style:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"10px",flexWrap:"wrap"}});
+    const hInfo = div({style:{flex:"1",minWidth:"0"}});
+    hInfo.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px"}}, "🪞 AR Virtual Try-On"));
+    hInfo.appendChild(div({style:{color:T.textMid,fontSize:"11px",marginTop:"2px"}}, `Trying: ${selected.name} · Drag to reposition · Pinch/slider to resize`));
+    header.appendChild(hInfo);
+    header.appendChild(goldBtn("✕ STOP", ()=>{
+      arStream?.getTracks().forEach(t=>t.stop()); arStream=null;
+      cancelAnimationFrame(arAnimFrame);
+      setState({arCamState:"idle",arSelected:null});
+    }, {small:true,outline:true}));
+    wrap.appendChild(header);
+
+    // Canvas container
+    const canvasWrap = div({style:{position:"relative",borderRadius:"16px",overflow:"hidden",background:"#000",border:`1px solid ${T.borderGold}55`,boxShadow:`0 0 0 1px ${T.border},0 8px 32px rgba(0,0,0,.8)`}});
+
+    const video = el("video",{id:"arVideo",autoplay:"",playsinline:"",muted:"",style:{display:"none"}});
+    const canvas = el("canvas",{id:"arCanvas",style:{width:"100%",display:"block",touchAction:"none",cursor:"grab"}});
+
+    // Mirror label
+    const mirrorLabel = div({style:{position:"absolute",bottom:"12px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,.6)",backdropFilter:"blur(6px)",border:`1px solid ${T.border}`,borderRadius:"20px",padding:"4px 14px",color:T.textMid,fontSize:"10px",fontFamily:"'Cinzel',serif",letterSpacing:"1.5px",whiteSpace:"nowrap",pointerEvents:"none"}}, "👆 DRAG TO REPOSITION");
+
+    canvasWrap.appendChild(video);
+    canvasWrap.appendChild(canvas);
+    canvasWrap.appendChild(mirrorLabel);
+    wrap.appendChild(canvasWrap);
+
+    // Controls row
+    const ctrlRow = div({style:{marginTop:"12px",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}});
+
+    // Size slider
+    const sizeLabel = span({style:{color:T.textMid,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1px",whiteSpace:"nowrap"}}, "👕 SIZE");
+    ctrlRow.appendChild(sizeLabel);
+    const sizeSlider = inp({type:"range",min:"0.3",max:"2.2",step:"0.03",value:"1",style:{flex:"1",accentColor:T.gold,minWidth:"100px"}});
+    sizeSlider.addEventListener("input",e=>{ arOverlayPos.scale=parseFloat(e.target.value); });
+    ctrlRow.appendChild(sizeSlider);
+
+    // Vertical position slider
+    ctrlRow.appendChild(span({style:{color:T.textMid,fontSize:"11px",fontFamily:"'Cinzel',serif",letterSpacing:"1px",whiteSpace:"nowrap"}}, "↕ HEIGHT"));
+    const vSlider = inp({type:"range",min:"0.1",max:"0.95",step:"0.01",value:String(arOverlayPos.y),style:{flex:"1",accentColor:T.gold,minWidth:"100px"}});
+    vSlider.addEventListener("input",e=>{ arOverlayPos.y=parseFloat(e.target.value); });
+    ctrlRow.appendChild(vSlider);
+
+    wrap.appendChild(ctrlRow);
+
+    // Opacity/blend row
+    const blendRow = div({style:{marginTop:"8px",display:"flex",gap:"8px",flexWrap:"wrap"}});
+    let currentBlend = "screen"; // screen blend makes clothing look natural on body
+    let opacity = 0.82;
+    ["Overlay","Natural","Ghost"].forEach((label,i)=>{
+      const modes=[{blend:"source-over",op:0.82},{blend:"multiply",op:0.9},{blend:"source-over",op:0.4}];
+      const isActive = i===0;
+      const b = btn({style:{flex:"1",padding:"6px",borderRadius:"6px",fontFamily:"'Cinzel',serif",fontSize:"10px",letterSpacing:"1px",border:`1px solid ${isActive?T.gold:T.border}`,background:isActive?T.gold+"22":"transparent",color:isActive?T.gold:T.textDim,cursor:"pointer",transition:"all .2s"}},label);
+      b.addEventListener("click",()=>{
+        currentBlend=modes[i].blend; opacity=modes[i].op;
+        blendRow.querySelectorAll("button").forEach((bb,j)=>{
+          bb.style.border=`1px solid ${j===i?T.gold:T.border}`;
+          bb.style.background=j===i?T.gold+"22":"transparent";
+          bb.style.color=j===i?T.gold:T.textMid;
+        });
+      });
+      blendRow.appendChild(b);
+    });
+    wrap.appendChild(blendRow);
+
+    // Pointer drag logic
+    let isDragging = false;
+    const getPos = (e,c)=>{
+      const rect=c.getBoundingClientRect();
+      const cx = (e.clientX||e.touches?.[0]?.clientX||0);
+      const cy = (e.clientY||e.touches?.[0]?.clientY||0);
+      return {x:(cx-rect.left)/rect.width, y:(cy-rect.top)/rect.height};
+    };
+    canvas.addEventListener("mousedown",()=>{isDragging=true;canvas.style.cursor="grabbing";});
+    canvas.addEventListener("mouseup",()=>{isDragging=false;canvas.style.cursor="grab";});
+    canvas.addEventListener("mouseleave",()=>{isDragging=false;canvas.style.cursor="grab";});
+    canvas.addEventListener("mousemove",e=>{
+      if(!isDragging) return;
+      const pos=getPos(e,canvas);
+      arOverlayPos.x=Math.max(0.05,Math.min(0.95,pos.x));
+      arOverlayPos.y=Math.max(0.05,Math.min(0.95,pos.y));
+      vSlider.value=String(arOverlayPos.y);
+    });
+    canvas.addEventListener("touchstart",e=>{isDragging=true;if(e.touches.length===2){arPinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}},{ passive:true });
+    canvas.addEventListener("touchend",()=>{isDragging=false;arPinchDist=0;});
+    canvas.addEventListener("touchmove",e=>{
+      e.preventDefault();
+      if(e.touches.length===2){
+        const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+        if(arPinchDist>0){const delta=(d-arPinchDist)/200;arOverlayPos.scale=Math.max(0.3,Math.min(2.2,arOverlayPos.scale+delta));sizeSlider.value=String(arOverlayPos.scale);}
+        arPinchDist=d;
+      } else if(isDragging && e.touches.length===1){
+        const pos=getPos(e,canvas);
+        arOverlayPos.x=Math.max(0.05,Math.min(0.95,pos.x));
+        arOverlayPos.y=Math.max(0.05,Math.min(0.95,pos.y));
+        vSlider.value=String(arOverlayPos.y);
+      }
+    },{passive:false});
+
+    // Draw loop — retry until elements exist after re-render
+    function attachARStream(attempts) {
+      const v=document.getElementById("arVideo");
+      const c=document.getElementById("arCanvas");
+      if(!v||!c) {
+        if(attempts>0) setTimeout(()=>attachARStream(attempts-1), 50);
+        return;
+      }
+      if(!arStream) {
+        setState({arCamState:"idle",arCamMsg:"Camera stream lost. Please try again."});
+        return;
+      }
+      if(v.srcObject !== arStream) {
+        v.srcObject=arStream;
+        v.play().catch(err=>{
+          setState({arCamState:"denied",arCamMsg:"Could not start camera playback: "+err.message});
+        });
+      }
+
+      // Determine smart default Y based on garment type
+      const typeYMap={dress:0.45,top:0.33,bottom:0.6,jacket:0.33,other:0.4};
+      arOverlayPos.y=typeYMap[selected.type]||0.4;
+      arOverlayPos.x=0.5;
+      vSlider.value=String(arOverlayPos.y);
+
+      // Aspect ratios per garment type
+      const typeAspect={dress:0.6,top:0.8,bottom:0.55,jacket:0.75,other:0.65};
+      const aspect=typeAspect[selected.type]||0.65;
+
+      // Preload image once
+      let cachedImg=null;
+      const svgSrc=selected.photo||typeSVG(selected.type,selected.color);
+      const preloadImg=new Image();
+      preloadImg.onload=()=>{cachedImg=preloadImg;};
+      preloadImg.src=svgSrc;
+
+      const draw=()=>{
+        if(!v||v.readyState<2){arAnimFrame=requestAnimationFrame(draw);return;}
+        c.width=v.videoWidth||640; c.height=v.videoHeight||480;
+        const ctx=c.getContext("2d");
+
+        // Mirror the camera (selfie view)
+        ctx.save();
+        ctx.scale(-1,1);
+        ctx.drawImage(v,-c.width,0,c.width,c.height);
+        ctx.restore();
+
+        if(cachedImg) {
+          const {x,y,scale}=arOverlayPos;
+          // Width: fraction of canvas width depending on type
+          const baseW = selected.type==="bottom" ? c.width*0.38 : c.width*0.42;
+          const w = baseW * scale;
+          const h = w / aspect;
+
+          // For tops/jackets: anchor at shoulder level; for bottoms: at waist; for dress: at shoulders
+          const anchorY = selected.type==="bottom" ? y*c.height - h*0.08 : y*c.height - h*0.05;
+          const drawX = x*c.width - w/2;
+
+          // Shadow/depth effect under garment
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          ctx.filter = "blur(12px)";
+          ctx.fillStyle="#000";
+          ctx.beginPath();
+          ctx.ellipse(x*c.width, anchorY+h*0.92, w*0.42, h*0.06, 0, 0, Math.PI*2);
+          ctx.fill();
+          ctx.restore();
+
+          // Draw the garment with selected blend
+          ctx.save();
+          ctx.globalCompositeOperation = currentBlend;
+          ctx.globalAlpha = opacity;
+
+          if(selected.photo) {
+            // Real photo: clip to rounded rect for cleaner look
+            ctx.beginPath();
+            const r = 8;
+            ctx.moveTo(drawX+r, anchorY);
+            ctx.lineTo(drawX+w-r, anchorY);
+            ctx.quadraticCurveTo(drawX+w, anchorY, drawX+w, anchorY+r);
+            ctx.lineTo(drawX+w, anchorY+h-r);
+            ctx.quadraticCurveTo(drawX+w, anchorY+h, drawX+w-r, anchorY+h);
+            ctx.lineTo(drawX+r, anchorY+h);
+            ctx.quadraticCurveTo(drawX, anchorY+h, drawX, anchorY+h-r);
+            ctx.lineTo(drawX, anchorY+r);
+            ctx.quadraticCurveTo(drawX, anchorY, drawX+r, anchorY);
+            ctx.closePath();
+            ctx.clip();
+          }
+
+          ctx.drawImage(cachedImg, drawX, anchorY, w, h);
+          ctx.restore();
+
+          // Gold edge glow around garment to make it pop
+          ctx.save();
+          ctx.globalAlpha=0.18;
+          ctx.shadowColor=T.gold;
+          ctx.shadowBlur=18;
+          ctx.globalCompositeOperation="source-over";
+          ctx.strokeStyle=T.gold;
+          ctx.lineWidth=1.5;
+          ctx.strokeRect(drawX+2, anchorY+2, w-4, h-4);
+          ctx.restore();
+
+          // Fit badge in corner
+          ctx.save();
+          ctx.globalAlpha=0.88;
+          const badgeX=drawX+w-4, badgeY=anchorY-4;
+          ctx.fillStyle="#0a0800cc";
+          ctx.beginPath(); ctx.roundRect(badgeX-52, badgeY, 52, 20, 6); ctx.fill();
+          ctx.fillStyle=T.gold;
+          ctx.font="bold 10px 'Cinzel',serif";
+          ctx.textAlign="right";
+          ctx.fillText("TRY-ON", badgeX-6, badgeY+13);
+          ctx.restore();
+        }
+
+        arAnimFrame=requestAnimationFrame(draw);
+      };
+      arAnimFrame=requestAnimationFrame(draw);
+    }
+    attachARStream(20); // retry up to 20×50ms = 1s
+
+    return wrap;
+  }
+
+  if(camState==="denied") {
+    const wrap = div({style:{maxWidth:"480px"}});
+    wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"20px",marginBottom:"16px"}}, "AR Try-On"));
+    const errBox = div({style:{background:"#200a0a",border:"1px solid #7a1a1a",borderRadius:"12px",padding:"20px",marginBottom:"16px"}});
+    errBox.appendChild(div({style:{fontSize:"32px",marginBottom:"10px",textAlign:"center"}}, "📷"));
+    // Split message into lines and render each
+    const msgLines = STATE.arCamMsg.split("\n");
+    msgLines.forEach((line,i)=>{
+      if(line==="") return;
+      const isTitle = i===0;
+      errBox.appendChild(div({style:{color:isTitle?"#f87171":T.textMid,fontSize:isTitle?"14px":"12px",lineHeight:"1.7",marginBottom:isTitle?"8px":"2px",fontWeight:isTitle?"700":"400"}}, line));
+    });
+    const btnRow = div({style:{display:"flex",gap:"10px",marginTop:"14px"}});
+    btnRow.appendChild(goldBtn("🔄 TRY AGAIN", ()=>STATE.arSelected&&startARCamera(STATE.arSelected), {small:true}));
+    errBox.appendChild(btnRow);
+    wrap.appendChild(errBox);
+    // Android-specific tips box
+    const tipsBox = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"10px",padding:"14px",marginBottom:"16px"}});
+    tipsBox.appendChild(div({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"12px",fontWeight:"700",marginBottom:"10px",letterSpacing:"1px"}}, "📱 ANDROID TIPS"));
+    [
+      "In Chrome: tap the 🔒 lock icon in address bar → Permissions → Camera → Allow",
+      "Or go to: Settings → Apps → Chrome → Permissions → Camera → Allow",
+      "Make sure no other app (camera, video call) is using the camera",
+      "Try closing all other apps, then tap Try Again",
+    ].forEach(tip=>{
+      const row = div({style:{display:"flex",gap:"8px",marginBottom:"6px",alignItems:"flex-start"}});
+      row.appendChild(span({style:{color:T.gold,fontSize:"12px",flexShrink:"0"}}, "•"));
+      row.appendChild(span({style:{color:T.textMid,fontSize:"12px",lineHeight:"1.6"}}, tip));
+      tipsBox.appendChild(row);
+    });
+    wrap.appendChild(tipsBox);
+    wrap.appendChild(goldBtn("← CHOOSE DIFFERENT ITEM", ()=>setState({arCamState:"idle"}), {outline:true}));
+    return wrap;
+  }
+
+  // Idle — pick item
+  const wrap = div({});
+  wrap.appendChild(h2({style:{color:T.goldLight,fontFamily:"'Cinzel',serif",fontSize:"20px",marginBottom:"4px"}}, "AR Virtual Try-On"));
+  wrap.appendChild(p({style:{color:T.textMid,fontSize:"13px",marginBottom:"8px"}}, "Select a garment to try on using your front camera."));
+
+  const hint = div({style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"10px",padding:"10px 14px",marginBottom:"20px",display:"flex",gap:"8px",alignItems:"center"}});
+  hint.appendChild(span({style:{fontSize:"18px"}}, "💡"));
+  hint.appendChild(span({style:{color:T.textMid,fontSize:"12px"}}, "The garment will be overlaid on your live camera feed. Tap on screen to move it, use slider to resize."));
+  wrap.appendChild(hint);
+
+  if(camState==="requesting") {
+    wrap.appendChild(div({style:{color:T.gold,fontSize:"14px",padding:"20px",textAlign:"center",animation:"shimmer 1.5s infinite"}}, "⏳ Requesting camera permission..."));
+  }
+
+  const grid = div({style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"12px"}});
+  shop.clothes.forEach(item=>{
+    const card = div({className:"card-hover",style:{background:T.bg3,border:`1px solid ${T.border}`,borderRadius:"12px",overflow:"hidden",cursor:"pointer"}});
+    const imgWrap = div({style:{background:item.color+"22",height:"120px",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}});
+    if(item.photo) imgWrap.appendChild(el("img",{src:item.photo,alt:item.name,style:{width:"100%",height:"100%",objectFit:"cover"}}));
+    else imgWrap.appendChild(el("img",{src:typeSVG(item.type,item.color),alt:item.name,style:{height:"90px",objectFit:"contain"}}));
+    card.appendChild(imgWrap);
+    const info = div({style:{padding:"10px 12px"}});
+    info.appendChild(div({style:{color:T.text,fontSize:"12px",fontWeight:"700",fontFamily:"'Cinzel',serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, item.name));
+    info.appendChild(div({style:{color:T.gold,fontSize:"13px",fontWeight:"800",marginTop:"3px"}}, `₹${item.price}`));
+    info.appendChild(div({style:{color:T.goldDim,fontSize:"11px",marginTop:"4px",fontFamily:"'Cinzel',serif",letterSpacing:".5px"}}, "TAP TO TRY →"));
+    card.appendChild(info);
+    card.addEventListener("click",()=>startARCamera(item));
+    grid.appendChild(card);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+async function startARCamera(item) {
+  // Smart default position by garment type
+  const typeYMap={dress:0.45,top:0.33,bottom:0.6,jacket:0.33,other:0.4};
+  arOverlayPos = {x:0.5, y:typeYMap[item.type]||0.4, scale:1};
+  arPinchDist = 0;
+  setState({arSelected:item,arCamState:"requesting",arCamMsg:""});
+
+  // Stop any existing stream first to release the camera
+  if(arStream) {
+    arStream.getTracks().forEach(t=>t.stop());
+    arStream = null;
+  }
+
+  // Try progressively relaxed constraints
+  const attempts = [
+    // 1. Front camera with ideal resolution
+    {video:{facingMode:{ideal:"user"},width:{ideal:1280},height:{ideal:720}},audio:false},
+    // 2. Front camera only, no resolution hint
+    {video:{facingMode:"user"},audio:false},
+    // 3. Any camera, ideal front
+    {video:{facingMode:{ideal:"user"}},audio:false},
+    // 4. Any available camera, no constraints
+    {video:true,audio:false},
+  ];
+
+  let lastErr = null;
+  for(const constraints of attempts) {
+    try {
+      arStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setState({arCamState:"active"});
+      return;
+    } catch(e) {
+      lastErr = e;
+      // If permission denied, stop trying immediately
+      if(e.name==="NotAllowedError" || e.name==="PermissionDeniedError") break;
+      // Otherwise try next fallback
+    }
+  }
+
+  // All attempts failed
+  const e = lastErr;
+  let msg = "";
+  if(e.name==="NotAllowedError"||e.name==="PermissionDeniedError") {
+    msg = "Camera permission denied.\n\nTo allow:\n• Look for a camera icon 🎥 or lock icon 🔒 in your browser address bar\n• Click it → select 'Allow Camera'\n• Reload the page and try again";
+  } else if(e.name==="NotFoundError"||e.name==="DevicesNotFoundError") {
+    msg = "No camera found on this device.";
+  } else if(e.name==="NotReadableError"||e.name==="TrackStartError") {
+    msg = "Camera is in use by another app.\n\nPlease:\n• Close other apps using the camera (e.g. camera app, video call)\n• Then tap Try Again";
+  } else if(e.name==="OverconstrainedError"||e.name==="ConstraintNotSatisfiedError") {
+    msg = "Camera does not support the required settings.\n\nTap Try Again — we will use a simpler mode.";
+  } else {
+    msg = `Camera error: ${e.message || e.name}\n\nTap Try Again or try a different browser.`;
+  }
+  setState({arCamState:"denied",arCamMsg:msg});
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   MAIN RENDER
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+
+  let view;
+  if(STATE.view==="landing") view=renderLanding();
+  else if(STATE.view==="shopkeeper") view=renderShopkeeperAuth();
+  else if(STATE.view==="shopDashboard") view=renderShopDashboard();
+  else if(STATE.view==="customer") view=renderCustomerPortal();
+  else view=renderLanding();
+
+  root.appendChild(view);
+}
+
+// roundRect polyfill for older browsers
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    r=Math.min(r,w/2,h/2);
+    this.moveTo(x+r,y);this.lineTo(x+w-r,y);this.quadraticCurveTo(x+w,y,x+w,y+r);
+    this.lineTo(x+w,y+h-r);this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    this.lineTo(x+r,y+h);this.quadraticCurveTo(x,y+h,x,y+h-r);
+    this.lineTo(x,y+r);this.quadraticCurveTo(x,y,x+r,y);
+    this.closePath();return this;
+  };
+}
+
+// Start
+render();
+</script>
+</body>
+</html>
