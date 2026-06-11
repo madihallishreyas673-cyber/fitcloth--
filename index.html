@@ -163,7 +163,7 @@ function loadShops() {
           ageGroup:sanitize(c.ageGroup),
         }))
       }));
-    }
+    } 
   } catch(e){}
   const init = SHOPS_INIT.map(s=>({...s,clothes:[...s.clothes.map(c=>({...c}))]}));
   saveShops(init);
